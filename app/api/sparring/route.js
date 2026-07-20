@@ -144,4 +144,10 @@ async function callGroq(apiKey, systemPrompt, messages, maxTokens) {
       return Response.json({ error: data.error.message || "Groq API error" }, { status: 500 });
     }
 
-    var text = (data.choices && data.choices[0] && data.choices[0].message &&
+    var text = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "No response.";
+    return Response.json({ text: text });
+
+  } catch (err) {
+    return Response.json({ error: "Connection error with Groq" }, { status: 500 });
+  }
+}
