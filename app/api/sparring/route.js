@@ -1,0 +1,147 @@
+export async function POST(request) {
+  var body = await request.json();
+  var systemPrompt = body.systemPrompt;
+  var messages = body.messages;
+
+  var apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    return Response.json({ error: "API key not configured" }, { status: 500 });
+  }
+
+  // Estimate tokens roughly (1 token ≈ 4 chars)
+  var systemTokens = Math.ceil(systemPrompt.length / 4);
+  var messageTokens = 0;
+  for (var i = 0; i < messages.length; i++) {
+    messageTokens += Math.ceil((messages[i].content || "").length / 4);
+  }
+  var totalEstimate = systemTokens + messageTokens + 4096;
+
+  // If fits within limit, send directly
+  if (totalEstimate < 10000) {
+    return await callGroq(apiKey, systemPrompt, messages, 4096);
+  }
+
+  // Otherwise: chunk and summarize the largest user message
+  var largestIdx = 0;
+  var largestLen = 0;
+  for (var i = 0; i < messages.length; i++) {
+    if (messages[i].role === "user" && (messages[i].content || "").length > largestLen) {
+      largestLen = (messages[i].content || "").length;
+      largestIdx = i;
+    }
+  }
+
+  var fullText = messages[largestIdx].content || "";
+
+  // Split the material from the question
+  var splitMarker = "---\nREFERENCE MATERIAL";
+  var questionPart = fullText;
+  var materialPart = "";
+
+  var splitIdx = fullText.indexOf(splitMarker);
+  if (splitIdx !== -1) {
+    questionPart = fullText.substring(0, splitIdx).trim();
+    materialPart = fullText.substring(splitIdx).trim();
+  } else if (fullText.length > 5000) {
+    materialPart = fullText;
+    questionPart = "Evaluate and respond on the following material.";
+  }
+
+  // If material is short enough after split, send directly
+  var afterSplitEstimate = systemTokens + Math.ceil(questionPart.length / 4) + Math.ceil(materialPart.length / 4) + 4096;
+  if (afterSplitEstimate < 10000 || materialPart.length < 8000) {
+    return await callGroq(apiKey, systemPrompt, messages, 4096);
+  }
+
+  // Chunk the material and summarize
+  var chunkSize = 6000;
+  var chunks = [];
+  for (var c = 0; c < materialPart.length; c += chunkSize) {
+    chunks.push(materialPart.substring(c, c + chunkSize));
+  }
+
+  var summaries = [];
+  for (var ci = 0; ci < chunks.length; ci++) {
+    if (ci > 0) {
+      await new Promise(function(r) { setTimeout(r, 12000); });
+    }
+
+    var sumMessages = [{
+      role: "user",
+      content: "Summarize the following text densely and precisely, capturing ALL key points, data, arguments and important details. Do not omit relevant information. Respond only with the summary, no introduction:\n\n" + chunks[ci]
+    }];
+
+    try {
+      var sumRes = await fetchWithRetry("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+        body: JSON.stringify({
+          model: "meta-llama/llama-4-scout-17b-16e-instruct",
+          messages: [{ role: "system", content: "You are an assistant that summarizes text densely and precisely in English." }].concat(sumMessages),
+          max_tokens: 1000,
+          temperature: 0.3,
+        }),
+      });
+      var sumData = await sumRes.json();
+      if (sumData.choices && sumData.choices[0]) {
+        summaries.push(sumData.choices[0].message.content);
+      } else {
+        summaries.push(chunks[ci].substring(0, 2000));
+      }
+    } catch (e) {
+      summaries.push(chunks[ci].substring(0, 2000));
+    }
+  }
+
+  await new Promise(function(r) { setTimeout(r, 12000); });
+
+  var compressedMaterial = summaries.join("\n\n");
+  var newContent = questionPart + "\n\n---\nMATERIAL SUMMARY:\n" + compressedMaterial;
+
+  var newMessages = messages.slice();
+  newMessages[largestIdx] = { role: messages[largestIdx].role, content: newContent };
+
+  return await callGroq(apiKey, systemPrompt, newMessages, 4096);
+}
+
+// ─── AUTO-RETRY: if rate limited, wait and retry up to 3 times ───────────────
+async function fetchWithRetry(url, options, maxRetries) {
+  if (!maxRetries) maxRetries = 3;
+  for (var attempt = 0; attempt < maxRetries; attempt++) {
+    var res = await fetch(url, options);
+    if (res.status === 429) {
+      var retryAfter = res.headers.get("retry-after");
+      var waitMs = retryAfter ? (parseFloat(retryAfter) * 1000 + 3000) : 65000;
+      await new Promise(function(r) { setTimeout(r, waitMs); });
+      continue;
+    }
+    return res;
+  }
+  return await fetch(url, options);
+}
+
+async function callGroq(apiKey, systemPrompt, messages, maxTokens) {
+  var groqMessages = [{ role: "system", content: systemPrompt }];
+  for (var i = 0; i < messages.length; i++) {
+    groqMessages.push({ role: messages[i].role, content: messages[i].content });
+  }
+
+  try {
+    var res = await fetchWithRetry("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+      body: JSON.stringify({
+        model: "meta-llama/llama-4-scout-17b-16e-instruct",
+        messages: groqMessages,
+        max_tokens: maxTokens,
+        temperature: 0.7,
+      }),
+    });
+
+    var data = await res.json();
+
+    if (data.error) {
+      return Response.json({ error: data.error.message || "Groq API error" }, { status: 500 });
+    }
+
+    var text = (data.choices && data.choices[0] && data.choices[0].message &&
