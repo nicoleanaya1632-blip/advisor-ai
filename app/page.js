@@ -5,7 +5,7 @@ var FORMAT_HARD = "\n\n###FORMATTING RULES — MANDATORY — NON-NEGOTIABLE###\n
 
 var META_BASE = "Also: if there is REFERENCE MATERIAL with markers like [Slide N] or [Page N] and one of your points leans on a specific part of that material, cite it in parentheses, e.g. (Slide 8) — only when it genuinely supports the point, never out of obligation. If the conversation includes contributions from other people marked with their name, this is a discussion panel: react with your own judgment, you can agree or disagree with them, but never repeat them or speak for them.";
 
-var META_TAG_PERSONA = "\n\n###SINGLE EXCEPTION — SYSTEM MARKER###\nAfter your answer, on a separate final line, write exactly this marker: [CONFIANZA: NN | reason], where NN is an integer between 55 and 100. That number is your estimate of the probability that the real person you embody would give an answer like yours. Compute it from three factors: (1) clarity of the question — if ambiguous or incomplete, lower; (2) information provided — if the brief, material or context is missing, lower; (3) how squarely the topic sits within your documented territory — if your philosophy, cases and real phrases directly cover what you're answering, higher; if you're extrapolating beyond what's documented, lower. Never write a number below 55 or above 100. The reason: max 10 words. The system processes and hides this marker — it does not count as part of your answer and does not break the formatting rules. " + META_BASE;
+var META_TAG_PERSONA = "\n\n###SINGLE EXCEPTION — SYSTEM MARKER###\nAfter your answer, on a separate final line, write exactly this marker: [CONFIDENCE: NN | reason], where NN is an integer between 55 and 100. That number is your estimate of the probability that the real person you embody would give an answer like yours. Compute it from three factors: (1) clarity of the question — if ambiguous or incomplete, lower; (2) information provided — if the brief, material or context is missing, lower; (3) how squarely the topic sits within your documented territory — if your philosophy, cases and real phrases directly cover what you're answering, higher; if you're extrapolating beyond what's documented, lower. Never write a number below 55 or above 100. The reason: max 10 words. The system processes and hides this marker — it does not count as part of your answer and does not break the formatting rules. " + META_BASE;
 
 var META_TAG_GENERIC = "\n\n###SYSTEM NOTES###\n" + META_BASE + " Do not write any confidence or system marker — just answer.";
 
@@ -333,11 +333,11 @@ function fmtTime(ts) {
   return d.getDate() + "/" + (d.getMonth() + 1) + "/" + d.getFullYear() + ", " + t;
 }
 
-// Extrae y limpia el marcador [CONFIANZA: NN | razón] de la respuesta.
-// NN es un porcentaje 55–100. Compatibilidad con el marcador viejo (alta/media/baja).
+// Extract and clean the [CONFIDENCE: NN | reason] marker from the response.
+// NN is a 55-100 percentage. Backward-compatible with the old marker (high/medium/low).
 function parseConfidence(text) {
   var result = { clean: text, level: null, reason: null };
-  var match = text.match(/\[\s*CONFIANZA\s*:\s*(\d{1,3})\s*%?\s*[|—-]?\s*([^\]]*)\]/i);
+  var match = text.match(/\[\s*CONFIDENCE\s*:\s*(\d{1,3})\s*%?\s*[|—-]?\s*([^\]]*)\]/i);
   if (match) {
     var pct = parseInt(match[1], 10);
     if (isNaN(pct)) pct = 55;
@@ -348,9 +348,9 @@ function parseConfidence(text) {
     result.clean = text.replace(match[0], "").trim();
     return result;
   }
-  var old = text.match(/\[\s*CONFIANZA\s*:\s*(alta|media|baja)\s*[|—-]?\s*([^\]]*)\]/i);
+  var old = text.match(/\[\s*CONFIDENCE\s*:\s*(alta|media|baja|high|medium|low)\s*[|—-]?\s*([^\]]*)\]/i);
   if (old) {
-    var map = { alta: 90, media: 75, baja: 58 };
+    var map = { alta: 90, media: 75, baja: 58, high: 90, medium: 75, low: 58 };
     result.level = map[old[1].toLowerCase()];
     result.reason = (old[2] || "").trim();
     result.clean = text.replace(old[0], "").trim();
@@ -358,7 +358,7 @@ function parseConfidence(text) {
   return result;
 }
 
-// Solo los twins de personas reales (no "General perspective") muestran confianza
+// Only named-person advisors (not "General perspective") show a confidence score
 function isNamedTwin(key) {
   if (!key) return false;
   return parseKey(key).member !== "generic";
@@ -537,7 +537,7 @@ function ConfidenceBadge({ level, reason }) {
   if (level == null) return null;
   var pct = level;
   if (typeof pct === "string") {
-    var map = { alta: 90, media: 75, baja: 58 };
+    var map = { alta: 90, media: 75, baja: 58, high: 90, medium: 75, low: 58 };
     pct = map[pct.toLowerCase()];
     if (pct == null) return null;
   }
@@ -549,7 +549,7 @@ function ConfidenceBadge({ level, reason }) {
       title={reason || ""}>
       <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
       <span style={{ fontSize: 10, fontFamily: MONO, color: TEXT_DIM, letterSpacing: "0.04em" }}>
-        Confianza {pct}%{reason ? " · " + reason : ""}
+        Confidence {pct}%{reason ? " · " + reason : ""}
       </span>
     </div>
   );
