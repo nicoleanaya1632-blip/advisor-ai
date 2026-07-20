@@ -1185,7 +1185,7 @@ function CheckerView({ onBack, territories, onSaveTerritory, onSaveLearning, sav
         cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
       }}>
         {busy === which ? <span className="fa-spinner" /> : <span>▤</span>}
-        {busy === which ? "Leyendo..." : "Adjuntar"}
+        {busy === which ? "Reading..." : "Attach"}
       </button>
     );
   };
@@ -1220,7 +1220,7 @@ function CheckerView({ onBack, territories, onSaveTerritory, onSaveLearning, sav
         <div>
           {brandKeys.length > 0 && (
             <div style={{ marginBottom: 26 }}>
-              <div style={labelStyle}>{dot} Territorios guardados</div>
+              <div style={labelStyle}>{dot} Saved strategies</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {brandKeys.map(function(k) {
                   return (
@@ -1979,7 +1979,7 @@ export default function Home() {
     if (!imageData && deliverable.trim().length > 0) {
       userText += "\n\n---\nREFERENCE MATERIAL" + (fileName ? " (" + fileName + ")" : "") + ":\n" + deliverable.trim();
     } else if (imageData && fileName) {
-      userText += "\n\n[Imagen adjunta: " + fileName + "]";
+      userText += "\n\n[Image attached: " + fileName + "]";
     }
 
     var img = imageData;
@@ -2018,7 +2018,7 @@ export default function Home() {
     if (attach && attach.text) {
       apiContent += "\n\n---\nREFERENCE MATERIAL (" + attach.name + "):\n" + attach.text;
     } else if (attach && attach.image) {
-      apiContent += "\n\n[Imagen adjunta: " + attach.name + "]";
+      apiContent += "\n\n[Image attached: " + attach.name + "]";
       img = attach.image;
     }
 
@@ -2322,7 +2322,7 @@ export default function Home() {
                   }}>
                     <span style={{ fontSize: 15 }}>📎</span>
                     <span style={{ fontSize: 12.5, fontFamily: MONO, fontWeight: 700, color: INK, letterSpacing: "0.02em" }}>
-                      {fileName ? "1 adjunto" : "Adjuntar"}
+                      {fileName ? "1 attachment" : "Attach"}
                     </span>
                   </button>
                   <button onClick={runEvaluation} disabled={!canRun} className={canRun ? "fa-send" : ""} style={{
